@@ -319,7 +319,7 @@
         <p class="hint">Se não souber explicar, a gente te chama no WhatsApp pra combinar.</p>
       </div>
       <div class="field" id="f-pay">
-        <span class="label">Como vai pagar? <span style="text-transform:none;letter-spacing:0;font-weight:500;color:var(--muted)">(opcional)</span></span>
+        <span class="label">Como vai pagar?</span>
         <div class="seg">
           <button type="button" data-pay="cash">Dinheiro</button>
           <button type="button" data-pay="pix">Pix</button>
@@ -388,7 +388,7 @@
   var order = [];      // ordem em que os itens entraram no carrinho
   var DATA = null;
   var fulfillment = null;
-  var payment = null;  // cash | pix | credit | debit (opcional)
+  var payment = null;  // cash | pix | credit | debit (obrigatório)
   var sending = false;
 
   // ── Ícones (traço fino, no estilo do impresso) ─────────────────────
@@ -647,10 +647,10 @@
     if (!isOpenNow()) { showError(closedText() + '.'); updateOpenState(); return; }
     var name = document.getElementById('c-name').value.replace(/\s+/g, ' ').trim();
     var phone = phoneDigits(document.getElementById('c-phone').value);
-    var badName = name.length < 2, badPhone = phone.length < 10 || phone.length > 13, badKind = !fulfillment;
-    setInvalid('f-name', badName); setInvalid('f-phone', badPhone); setInvalid('f-kind', badKind);
-    if (badName || badPhone || badKind) {
-      showError(badName ? 'Informe seu nome.' : badPhone ? 'Informe seu WhatsApp com DDD.' : 'Escolha entrega ou retirada.');
+    var badName = name.length < 2, badPhone = phone.length < 10 || phone.length > 13, badKind = !fulfillment, badPay = !payment;
+    setInvalid('f-name', badName); setInvalid('f-phone', badPhone); setInvalid('f-kind', badKind); setInvalid('f-pay', badPay);
+    if (badName || badPhone || badKind || badPay) {
+      showError(badName ? 'Informe seu nome.' : badPhone ? 'Informe seu WhatsApp com DDD.' : badKind ? 'Escolha entrega ou retirada.' : 'Escolha como vai pagar.');
       return;
     }
     showError(null);
@@ -1026,7 +1026,8 @@
     var pay = e.target.closest('[data-pay]');
     if (pay) {
       var v = pay.getAttribute('data-pay');
-      payment = payment === v ? null : v;  // tocar de novo desmarca (é opcional)
+      payment = v;
+      setInvalid('f-pay', false);
       document.querySelectorAll('[data-pay]').forEach(function (b) {
         b.classList.toggle('on', b.getAttribute('data-pay') === payment);
       });
