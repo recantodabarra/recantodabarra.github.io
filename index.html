@@ -62,6 +62,12 @@
     text-transform:uppercase;color:var(--terra);
   }
   .squiggle{display:block;width:100%;height:12px;margin-top:14px;color:var(--dots);}
+  .open-status{
+    display:inline-flex;align-items:center;gap:7px;margin:12px 0 0;padding:5px 12px;border-radius:999px;
+    font-size:.8rem;font-weight:600;background:rgba(31,143,78,.12);color:#17703c;
+  }
+  .open-status::before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor;}
+  .open-status.closed{background:rgba(110,16,16,.1);color:var(--wine);}
 
   /* ── Abas (fixas no topo ao rolar) ────────────────────────────────── */
   .tabs{
@@ -516,6 +522,7 @@
     document.getElementById('sheet-form').hidden = false;
     document.getElementById('sheet-done').hidden = true;
     renderSheet();
+    updateOpenState();
     openSheetEl(sheet);
   }
 
@@ -600,6 +607,7 @@
 
   function submit() {
     if (sending) return;
+    if (!isOpenNow()) { showError(closedText() + '.'); updateOpenState(); return; }
     var name = document.getElementById('c-name').value.replace(/\s+/g, ' ').trim();
     var phone = phoneDigits(document.getElementById('c-phone').value);
     var badName = name.length < 2, badPhone = phone.length < 10 || phone.length > 13, badKind = !fulfillment;
@@ -711,6 +719,7 @@
     html += '<header class="hero"><span class="moon"></span><span class="sun"></span>';
     html += '<h1 class="brand"><span class="w">Recanto</span><img src="' + LOGO + '" alt="Recanto da Barra"><span class="w">Da Barra</span></h1>';
     html += '<p class="kicker">Bar &amp; Restaurante</p>';
+    html += '<p class="open-status" id="open-status" hidden></p>';
     html += '<svg class="squiggle" viewBox="0 0 400 12" preserveAspectRatio="none" aria-hidden="true">' +
       '<path d="M0 7 C 40 3, 80 10, 130 6 S 230 3, 280 7 S 360 9, 400 5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>';
     html += '</header>';
@@ -799,6 +808,7 @@
     html += '<b>Instagram:</b> @recanto.dabarra<br>';
     html += '<b>Localização:</b> Praia de Barra do Rio – Centro<br>';
     html += '<b>Pagamento:</b> dinheiro, cartão (débito/crédito) e Pix';
+    if (hasHours()) html += '<br><b>Pedidos:</b> ' + esc(hoursSummary());
     html += '<hr><small>Venda proibida para menores de 18 anos.</small>';
     html += '</div></footer>';
 
@@ -830,6 +840,85 @@
     }
     activate(0);
     renderCartBar();
+    updateOpenState();
+    setInterval(updateOpenState, 60000);  // página aberta muda sozinha na hora de abrir/fechar
+  }
+
+  // ── Horário de pedidos ──────────────────────────────────────────────
+  // Mesma regra de app/services/opening_hours.py (o servidor é quem trava o
+  // envio; aqui é só pra mostrar). "17:00-02:00" vira a madrugada.
+  var DAY_KEYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];  // = Date.getDay()
+  var DAY_SHORT = { seg: 'Seg', ter: 'Ter', qua: 'Qua', qui: 'Qui', sex: 'Sex', sab: 'Sáb', dom: 'Dom' };
+  var DAY_LONG = { seg: 'segunda', ter: 'terça', qua: 'quarta', qui: 'quinta', sex: 'sexta', sab: 'sábado', dom: 'domingo' };
+
+  function hasHours() { return !!(DATA && DATA.hours && Object.keys(DATA.hours).length); }
+  function toMin(s) { var p = s.trim().split(':'); return parseInt(p[0], 10) * 60 + parseInt(p[1], 10); }
+  function rangesOf(key) {
+    return String(DATA.hours[key] || '').split(',')
+      .map(function (r) { return r.trim(); }).filter(Boolean)
+      .map(function (r) {
+        var p = r.split('-'), s = toMin(p[0]), e = toMin(p[1]);
+        return [s, e <= s ? e + 1440 : e];
+      })
+      .sort(function (a, b) { return a[0] - b[0]; });
+  }
+  function hm(min) {
+    var h = Math.floor(min / 60) % 24, m = min % 60;
+    return h + 'h' + (m ? String(m).padStart(2, '0') : '');
+  }
+  // Range em andamento agora (com o minuto em que fecha), ou null
+  function currentRange(d) {
+    var m = d.getHours() * 60 + d.getMinutes();
+    var today = rangesOf(DAY_KEYS[d.getDay()]).filter(function (r) { return r[0] <= m && m < r[1]; })[0];
+    if (today) return today;
+    return rangesOf(DAY_KEYS[(d.getDay() + 6) % 7])
+      .filter(function (r) { return r[1] > 1440 && m < r[1] - 1440; })[0] || null;
+  }
+  function isOpenNow() { return !hasHours() || !!currentRange(new Date()); }
+  function nextOpening(d) {
+    var m = d.getHours() * 60 + d.getMinutes();
+    for (var i = 0; i < 8; i++) {
+      var key = DAY_KEYS[(d.getDay() + i) % 7];
+      var r = rangesOf(key).filter(function (x) { return i > 0 || x[0] > m; })[0];
+      if (r) return { days: i, key: key, start: r[0] };
+    }
+    return null;
+  }
+  function closedText() {
+    var n = nextOpening(new Date());
+    if (!n) return 'Fechado no momento';
+    var when = n.days === 0 ? 'hoje' : n.days === 1 ? 'amanhã' : DAY_LONG[n.key];
+    return 'Fechado agora · abrimos ' + when + ' às ' + hm(n.start);
+  }
+  function hoursSummary() {
+    // "Ter a Qui 17h às 23h · Sex e Sáb 17h às 2h" — junta dias seguidos com o mesmo horário
+    var order = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'], groups = [];
+    order.forEach(function (k) {
+      var txt = rangesOf(k).map(function (r) { return hm(r[0]) + ' às ' + hm(r[1]); }).join(' e ');
+      if (!txt) return;
+      var last = groups[groups.length - 1];
+      if (last && last.txt === txt && order.indexOf(last.days[last.days.length - 1]) === order.indexOf(k) - 1) last.days.push(k);
+      else groups.push({ txt: txt, days: [k] });
+    });
+    return groups.map(function (g) {
+      var d = g.days.map(function (k) { return DAY_SHORT[k]; });
+      var label = d.length >= 3 ? d[0] + ' a ' + d[d.length - 1] : d.join(' e ');
+      return label + ' ' + g.txt;
+    }).join(' · ');
+  }
+  function updateOpenState() {
+    if (!hasHours()) return;
+    var el = document.getElementById('open-status');
+    var r = currentRange(new Date());
+    el.hidden = false;
+    el.classList.toggle('closed', !r);
+    el.textContent = r ? 'Aberto agora · até ' + hm(r[1]) : closedText();
+    if (!sending && document.getElementById('sheet-form') && !document.getElementById('sheet-form').hidden) {
+      var btn = document.getElementById('send-btn');
+      btn.disabled = !r;
+      if (!r) btn.textContent = 'Fechado agora';
+      else btn.textContent = LIVE ? 'Enviar pedido' : 'Continuar no WhatsApp';
+    }
   }
 
   function comboPick(ci) {
