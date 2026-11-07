@@ -571,9 +571,10 @@
   // ── Envio ───────────────────────────────────────────────────────────
   function buildWhatsAppMessage(number, name, kind) {
     var lines = [];
-    lines.push(number ? '*Pedido #' + number + '* — cardápio digital' : 'Olá! Vim pelo cardápio digital e queria fazer esse pedido:');
+    lines.push(number ? '*Pedido #' + number + '* - cardápio digital' : 'Olá! Vim pelo cardápio digital e queria fazer esse pedido:');
     lines.push('Nome: ' + name);
-    lines.push(kind === 'delivery' ? 'Entrega aqui na praia 🛵' : 'Vou retirar 🏖️');
+    // Sem emoji: o WhatsApp Desktop estraga emoji vindo de link wa.me (vira "�")
+    lines.push(kind === 'delivery' ? 'Entrega aqui na praia' : 'Vou retirar');
     lines.push('');
     var byCategory = {}, cats = [];
     order.forEach(function (k) {
@@ -584,7 +585,7 @@
     cats.forEach(function (cat) {
       lines.push('*' + cat + '*');
       byCategory[cat].forEach(function (k) {
-        lines.push('• ' + cart[k] + 'x ' + registry[k].name + ' — ' + money(cart[k] * registry[k].price));
+        lines.push('- ' + cart[k] + 'x ' + registry[k].name + ' - ' + money(cart[k] * registry[k].price));
       });
       lines.push('');
     });
