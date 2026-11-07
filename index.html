@@ -311,7 +311,12 @@
           <button type="button" data-kind="delivery" role="radio" aria-checked="false">🛵 Entrega</button>
           <button type="button" data-kind="pickup" role="radio" aria-checked="false">🏖️ Retirada</button>
         </div>
-        <p class="hint" id="kind-hint" hidden>Entregamos só aqui na Praia de Barra do Rio. Se precisar, a gente te chama no WhatsApp pra combinar o local.</p>
+        <p class="hint" id="kind-hint" hidden>Entregamos só aqui na Praia de Barra do Rio.</p>
+      </div>
+      <div class="field" id="f-where" hidden>
+        <label for="c-where">Onde entregar? <span style="text-transform:none;letter-spacing:0;font-weight:500;color:var(--muted)">(opcional)</span></label>
+        <input id="c-where" maxlength="200" autocomplete="off" placeholder="Ex.: barraca 3, casa azul perto da igreja">
+        <p class="hint">Se não souber explicar, a gente te chama no WhatsApp pra combinar.</p>
       </div>
       <div class="field">
         <label for="obs">Observações <span style="text-transform:none;letter-spacing:0;font-weight:500;color:var(--muted)">(opcional)</span></label>
@@ -575,6 +580,8 @@
     lines.push('Nome: ' + name);
     // Sem emoji: o WhatsApp Desktop estraga emoji vindo de link wa.me (vira "�")
     lines.push(kind === 'delivery' ? 'Entrega aqui na praia' : 'Vou retirar');
+    var where = kind === 'delivery' ? document.getElementById('c-where').value.trim() : '';
+    if (where) lines.push('Entregar em: ' + where);
     lines.push('');
     var byCategory = {}, cats = [];
     order.forEach(function (k) {
@@ -619,6 +626,7 @@
     }
     showError(null);
     remember('name', name); remember('phone', phone);
+    remember('where', document.getElementById('c-where').value.trim());
 
     // PC fora do ar: não tem como registrar no Barrio — segue só pelo WhatsApp
     // (síncrono, dentro do toque, então o navegador não bloqueia a nova aba)
@@ -632,6 +640,7 @@
       customer_phone: phone,
       fulfillment: fulfillment,
       notes: document.getElementById('obs').value.trim() || null,
+      delivery_location: fulfillment === 'delivery' ? (document.getElementById('c-where').value.trim() || null) : null,
       items: order.map(function (k) {
         var l = registry[k].line;
         return { menu_item_id: l.menu_item_id, quantity: cart[k], complemento: l.complemento || null, half_with: l.half_with || null };
@@ -992,6 +1001,7 @@
         b.setAttribute('aria-checked', on ? 'true' : 'false');
       });
       document.getElementById('kind-hint').hidden = fulfillment !== 'delivery';
+      document.getElementById('f-where').hidden = fulfillment !== 'delivery';
       setInvalid('f-kind', false);
       return;
     }
@@ -1012,6 +1022,7 @@
   document.getElementById('new-order').addEventListener('click', closeAll);
   document.getElementById('c-name').value = recall('name');
   document.getElementById('c-phone').value = recall('phone') ? formatPhone(recall('phone')) : '';
+  document.getElementById('c-where').value = recall('where');
 
   function fetchJson(url, ms) {
     var ctrl = 'AbortController' in window ? new AbortController() : null;
