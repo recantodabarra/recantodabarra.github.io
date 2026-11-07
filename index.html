@@ -846,7 +846,9 @@
 
   // ── Horário de pedidos ──────────────────────────────────────────────
   // Mesma regra de app/services/opening_hours.py (o servidor é quem trava o
-  // envio; aqui é só pra mostrar). "17:00-02:00" vira a madrugada.
+  // envio; aqui é só pra mostrar). "17:00-02:00" vira a madrugada; "18:00-"
+  // (sem fim) vale até 5h da madrugada e não mostra hora de fechar.
+  var OPEN_END = 1440 + 5 * 60;
   var DAY_KEYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];  // = Date.getDay()
   var DAY_SHORT = { seg: 'Seg', ter: 'Ter', qua: 'Qua', qui: 'Qui', sex: 'Sex', sab: 'Sáb', dom: 'Dom' };
   var DAY_LONG = { seg: 'segunda', ter: 'terça', qua: 'quarta', qui: 'quinta', sex: 'sexta', sab: 'sábado', dom: 'domingo' };
@@ -857,7 +859,9 @@
     return String(DATA.hours[key] || '').split(',')
       .map(function (r) { return r.trim(); }).filter(Boolean)
       .map(function (r) {
-        var p = r.split('-'), s = toMin(p[0]), e = toMin(p[1]);
+        var p = r.split('-'), s = toMin(p[0]);
+        if (!(p[1] || '').trim()) return [s, OPEN_END, true];  // sem hora de fechar
+        var e = toMin(p[1]);
         return [s, e <= s ? e + 1440 : e];
       })
       .sort(function (a, b) { return a[0] - b[0]; });
@@ -894,7 +898,9 @@
     // "Ter a Qui 17h às 23h · Sex e Sáb 17h às 2h" — junta dias seguidos com o mesmo horário
     var order = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'], groups = [];
     order.forEach(function (k) {
-      var txt = rangesOf(k).map(function (r) { return hm(r[0]) + ' às ' + hm(r[1]); }).join(' e ');
+      var txt = rangesOf(k).map(function (r) {
+        return r[2] ? 'a partir das ' + hm(r[0]) : hm(r[0]) + ' às ' + hm(r[1]);
+      }).join(' e ');
       if (!txt) return;
       var last = groups[groups.length - 1];
       if (last && last.txt === txt && order.indexOf(last.days[last.days.length - 1]) === order.indexOf(k) - 1) last.days.push(k);
@@ -912,7 +918,7 @@
     var r = currentRange(new Date());
     el.hidden = false;
     el.classList.toggle('closed', !r);
-    el.textContent = r ? 'Aberto agora · até ' + hm(r[1]) : closedText();
+    el.textContent = r ? (r[2] ? 'Aberto agora' : 'Aberto agora · até ' + hm(r[1])) : closedText();
     if (!sending && document.getElementById('sheet-form') && !document.getElementById('sheet-form').hidden) {
       var btn = document.getElementById('send-btn');
       btn.disabled = !r;
